@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FaSignOutAlt } from 'react-icons/fa';
+import { FaSignOutAlt, FaCode } from 'react-icons/fa';
 
 function Navbar({ setAuth }) {
   const navigate = useNavigate();
@@ -18,10 +18,18 @@ function Navbar({ setAuth }) {
   };
 
   return (
-    <nav className="dashboard-nav">
-      <div className="nav-right">
+    <nav className="navbar">
+      <div className="navbar-brand">
+        <FaCode />
+        <span>Code Snippets</span>
+      </div>
+      <div className="navbar-menu">
+        {/* <a href="/dashboard" className="navbar-item">Dashboard</a>
+        <a href="/new-snippet" className="navbar-item">New Snippet</a> */}
+      </div>
+      <div className="navbar-end">
         <button 
-          className="nav-button logout-button"
+          className="logout-btn"
           onClick={handleLogout}
         >
           <FaSignOutAlt /> Logout

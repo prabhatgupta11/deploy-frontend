@@ -1,27 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-// eslint-disable-next-line no-unused-vars
 import axios from 'axios';
-import SyntaxHighlighter from 'react-syntax-highlighter';
-import { docco } from 'react-syntax-highlighter/dist/esm/styles/hljs';
-import { FaPlus, FaCopy, FaTrash, FaCode } from 'react-icons/fa';
-// eslint-disable-next-line no-unused-vars
-import { API_URL, CARD_COLORS } from '../config';
+// import SyntaxHighlighter from 'react-syntax-highlighter';
+// import { docco } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import { FaPlus, FaCode, FaSearch, FaChevronLeft, FaChevronRight, FaBookmark, FaStar } from 'react-icons/fa';
+import { API_URL } from '../config';
+// import { useAuth } from '../contexts/AuthContext';
+import { CircularProgress, Typography } from '@mui/material';
+import SnippetCard from '../components/SnippetCard';
 
 function Dashboard() {
   const [snippets, setSnippets] = useState([]);
   const [filters, setFilters] = useState({
     language: '',
     selectedTags: [],
-    search: ''
+    search: '',
+    showBookmarked: false,
+    showStarred: false
   });
   const [availableTags, setAvailableTags] = useState([]);
   const [availableLanguages, setAvailableLanguages] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [snippetsPerPage] = useState(6);
+  const [snippetsPerPage] = useState(8);
   const [sortBy, setSortBy] = useState('newest');
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  // const { user } = useAuth();
 
   useEffect(() => {
     fetchSnippets();
@@ -34,12 +39,12 @@ function Dashboard() {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      // Sort snippets by createdAt in descending order
       const sortedSnippets = response.data.sort((a, b) =>
         new Date(b.createdAt) - new Date(a.createdAt)
       );
 
       setSnippets(sortedSnippets);
+      setLoading(false);
 
       // Extract unique tags and languages
       const tags = new Set();
@@ -52,275 +57,231 @@ function Dashboard() {
       setAvailableTags(Array.from(tags));
       setAvailableLanguages(Array.from(languages));
     } catch (err) {
-      toast.error('Error fetching snippets');
+      setError('Failed to fetch snippets');
+      setLoading(false);
     }
   };
 
-  const deleteSnippet = async (id) => {
+  const handleBookmark = async (snippetId) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`${API_URL}/api/snippets/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      toast.success('Snippet deleted successfully');
-      fetchSnippets();
+      const response = await axios.patch(
+        `${API_URL}/api/snippets/${snippetId}/bookmark`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setSnippets(snippets.map(snippet => 
+        snippet._id === snippetId ? response.data : snippet
+      ));
+      toast.success(response.data.isBookmarked ? 'Snippet bookmarked' : 'Bookmark removed');
     } catch (err) {
-      toast.error('Error deleting snippet');
+      console.error('Failed to update bookmark:', err);
     }
   };
 
-  const copyToClipboard = async (code) => {
+  const handleStar = async (snippetId) => {
     try {
-      await navigator.clipboard.writeText(code);
-      toast.success('Copied to clipboard!');
+      const token = localStorage.getItem('token');
+      const response = await axios.patch(
+        `${API_URL}/api/snippets/${snippetId}/star`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setSnippets(snippets.map(snippet => 
+        snippet._id === snippetId ? response.data : snippet
+      ));
+      toast.success(response.data.isStarred ? 'Snippet starred' : 'Star removed');
     } catch (err) {
-      toast.error('Failed to copy to clipboard');
+      console.error('Failed to update star:', err);
     }
-  };
-
-  const handleTagSelect = (tag) => {
-    setFilters(prev => ({
-      ...prev,
-      selectedTags: prev.selectedTags.includes(tag)
-        ? prev.selectedTags.filter(t => t !== tag)
-        : [...prev.selectedTags, tag]
-    }));
   };
 
   const filteredSnippets = snippets.filter(snippet => {
     const matchesLanguage = filters.language ? snippet.language === filters.language : true;
-
-    // Changed from every() to some() for OR condition between tags
     const matchesTags = filters.selectedTags.length > 0
-      ? filters.selectedTags.some(tag => snippet.tags.includes(tag))  // Changed from every to some
+      ? filters.selectedTags.some(tag => snippet.tags.includes(tag))
       : true;
-
     const matchesSearch = filters.search
       ? snippet.title.toLowerCase().includes(filters.search.toLowerCase()) ||
-      snippet.code.toLowerCase().includes(filters.search.toLowerCase()) ||
-      snippet.description.toLowerCase().includes(filters.search.toLowerCase())
+        snippet.code.toLowerCase().includes(filters.search.toLowerCase()) ||
+        snippet.description.toLowerCase().includes(filters.search.toLowerCase())
       : true;
+    const matchesBookmarked = filters.showBookmarked ? snippet.isBookmarked : true;
+    const matchesStarred = filters.showStarred ? snippet.isStarred : true;
 
-    return matchesLanguage && matchesTags && matchesSearch;
+    return matchesLanguage && matchesTags && matchesSearch && matchesBookmarked && matchesStarred;
   });
 
-  const getCardStyle = (index) => {
-    const colorIndex = index % CARD_COLORS.length;
-    const colors = CARD_COLORS[colorIndex];
-    return {
-      backgroundColor: colors.bg,
-      borderColor: colors.border
-    };
-  };
-
-  const sortSnippets = (snippets) => {
-    switch (sortBy) {
-      case 'newest':
-        return [...snippets].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      case 'oldest':
-        return [...snippets].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-      case 'title':
-        return [...snippets].sort((a, b) => a.title.localeCompare(b.title));
-      case 'language':
-        return [...snippets].sort((a, b) => a.language.localeCompare(b.language));
-      default:
-        return snippets;
-    }
-  };
-
+  // Pagination logic
   const indexOfLastSnippet = currentPage * snippetsPerPage;
   const indexOfFirstSnippet = indexOfLastSnippet - snippetsPerPage;
-  const currentSnippets = sortSnippets(filteredSnippets).slice(indexOfFirstSnippet, indexOfLastSnippet);
+  const currentSnippets = filteredSnippets.slice(indexOfFirstSnippet, indexOfLastSnippet);
   const totalPages = Math.ceil(filteredSnippets.length / snippetsPerPage);
 
-  const handlePageChange = (pageNumber) => {
-    setCurrentPage(pageNumber);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  if (loading) return <CircularProgress />;
+  if (error) return <Typography color="error">{error}</Typography>;
 
   return (
-    <div className="dashboard-container">
-      {/* Header Section */}
+    <div className="dashboard">
       <div className="dashboard-header">
-        <h1 className="main-title">My Code Snippets</h1>
-        <div className="header-actions">
-          <span className="snippet-counter">{filteredSnippets.length} snippets</span>
-        </div>
+        <h1 className="dashboard-title">
+          My Code Snippets
+          <span>Manage and organize your code snippets</span>
+        </h1>
       </div>
 
-      {/* Controls Bar */}
-      <div className="controls-bar">
-        <div className="filters-group">
-          <div className="filter-row">
-            <div className="filter-column">
-              <label className="filter-label">Language</label>
-              <select
-                value={filters.language}
-                onChange={(e) => setFilters({ ...filters, language: e.target.value })}
-                className="filter-select"
-              >
-                <option value="">All Languages</option>
-                {availableLanguages.map(lang => (
-                  <option key={lang} value={lang}>{lang}</option>
-                ))}
-              </select>
-            </div>
+      <div className="search-filters-container">
+        <div className="search-section">
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Search snippets..."
+            value={filters.search}
+            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+          />
+          <FaSearch className="search-icon" />
+        </div>
 
-            <div className="filter-column">
-              <label className="filter-label">Tags</label>
-              <select
-                value=""
-                onChange={(e) => handleTagSelect(e.target.value)}
-                className="filter-select"
-              >
-                <option value="">Select Tags...</option>
-                {availableTags
-                  .filter(tag => !filters.selectedTags.includes(tag))
-                  .map(tag => (
-                    <option key={tag} value={tag}>{tag}</option>
-                  ))}
-              </select>
-              <div className="selected-tags-container">
-                {filters.selectedTags.map(tag => (
-                  <span key={tag} className="selected-tag">
-                    {tag}
-                    <button 
-                      onClick={() => handleTagSelect(tag)} 
-                      className="remove-tag"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
+        <Link to="/new-snippet" className="new-snippet-btn">
+          <FaPlus /> New Snippet
+        </Link>
+      </div>
 
-            <div className="filter-column">
-              <label className="filter-label">Sort By</label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="filter-select"
+      <div className="filters-row">
+        <div className="filter-section">
+          <h3>Language</h3>
+          <select
+            value={filters.language}
+            onChange={(e) => setFilters({ ...filters, language: e.target.value })}
+          >
+            <option value="">All Languages</option>
+            {availableLanguages.map((lang) => (
+              <option key={lang} value={lang}>
+                {lang}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-section">
+          <h3>Tags</h3>
+          <select
+            value={filters.selectedTags}
+            onChange={(e) => {
+              const options = e.target.options;
+              const selectedValues = [];
+              for (let i = 0; i < options.length; i++) {
+                if (options[i].selected) {
+                  selectedValues.push(options[i].value);
+                }
+              }
+              setFilters({ ...filters, selectedTags: selectedValues });
+            }}
+            multiple
+            size="1"
+          >
+            <option value="" disabled>Select tags...</option>
+            {availableTags.map((tag) => (
+              <option key={tag} value={tag}>
+                {tag}
+              </option>
+            ))}
+          </select>
+          <div className="selected-tags">
+            {filters.selectedTags.map((tag) => (
+              <span 
+                key={tag} 
+                className="selected-tag"
+                onClick={() => {
+                  setFilters({
+                    ...filters,
+                    selectedTags: filters.selectedTags.filter(t => t !== tag)
+                  });
+                }}
               >
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="title">Title (A-Z)</option>
-                <option value="language">Language (A-Z)</option>
-              </select>
-            </div>
+                {tag}
+                <span className="remove-tag">×</span>
+              </span>
+            ))}
           </div>
+        </div>
 
-          <div className="search-action-group">
-            <div className="search-box">
-              <input
-                type="text"
-                placeholder="Search snippets..."
-                value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                className="search-input"
-              />
-            </div>
-            <button 
-              className="new-snippet-button"
-              onClick={() => navigate('/new-snippet')}
+        <div className="filter-section">
+          <h3>Sort By</h3>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="name">Name (A-Z)</option>
+          </select>
+        </div>
+
+        <div className="filter-section">
+          <h3>Quick Filters</h3>
+          <div className="quick-filters">
+            <button
+              className={`quick-filter-btn ${filters.showBookmarked ? 'active' : ''}`}
+              onClick={() => setFilters({ ...filters, showBookmarked: !filters.showBookmarked })}
             >
-              <FaPlus /> New Snippet
+              <FaBookmark /> Bookmarked
+            </button>
+            <button
+              className={`quick-filter-btn ${filters.showStarred ? 'active' : ''}`}
+              onClick={() => setFilters({ ...filters, showStarred: !filters.showStarred })}
+            >
+              <FaStar /> Starred
             </button>
           </div>
         </div>
       </div>
 
       <div className="snippets-grid">
-        {currentSnippets.map((snippet, index) => (
-          <div
+        {currentSnippets.map((snippet) => (
+          <SnippetCard 
             key={snippet._id}
-            className="snippet-card"
-            style={getCardStyle(index)}
-          >
-            <div className="snippet-header">
-              <h3>{snippet.title}</h3>
-              <div className="snippet-actions">
-                <button
-                  className="icon-btn"
-                  onClick={() => copyToClipboard(snippet.code)}
-                  title="Copy to clipboard"
-                >
-                  <FaCopy />
-                </button>
-                <button
-                  className="icon-btn delete"
-                  onClick={() => deleteSnippet(snippet._id)}
-                  title="Delete snippet"
-                >
-                  <FaTrash />
-                </button>
-              </div>
-            </div>
-
-            <div className="snippet-meta">
-              <span className="snippet-language">
-                <FaCode /> {snippet.language}
-              </span>
-              <span className="snippet-date">
-                {new Date(snippet.createdAt).toLocaleDateString()}
-              </span>
-            </div>
-
-            <div className="snippet-preview">
-              <SyntaxHighlighter
-                language={snippet.language}
-                style={docco}
-                customStyle={{ maxHeight: '200px' }}
-              >
-                {snippet.code}
-              </SyntaxHighlighter>
-            </div>
-
-            {snippet.description && (
-              <div className="snippet-description">
-                {snippet.description}
-              </div>
-            )}
-
-            <div className="snippet-tags">
-              {snippet.tags.map(tag => (
-                <span key={tag} className="tag">{tag}</span>
-              ))}
-            </div>
-          </div>
+            snippet={snippet}
+            onBookmark={handleBookmark}
+            onStar={handleStar}
+          />
         ))}
       </div>
 
-      <div className="pagination">
-        <button
-          onClick={() => handlePageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="page-button"
-        >
-          Previous
-        </button>
-
-        <div className="page-numbers">
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(number => (
-            <button
-              key={number}
-              onClick={() => handlePageChange(number)}
-              className={`page-number ${currentPage === number ? 'active' : ''}`}
-            >
-              {number}
-            </button>
-          ))}
+      {filteredSnippets.length === 0 ? (
+        <div className="empty-state">
+          <FaCode className="empty-state-icon" />
+          <h2 className="empty-state-title">No Snippets Found</h2>
+          <p className="empty-state-description">
+            Create your first code snippet to get started
+          </p>
+          <Link to="/new-snippet" className="new-snippet-btn">
+            <FaPlus /> Create New Snippet
+          </Link>
         </div>
-
-        <button
-          onClick={() => handlePageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="page-button"
-        >
-          Next
-        </button>
-      </div>
+      ) : (
+        <div className="pagination">
+          <button
+            className="pagination-btn"
+            onClick={() => setCurrentPage(currentPage - 1)}
+            disabled={currentPage === 1}
+          >
+            <FaChevronLeft /> Previous
+          </button>
+          <span className="pagination-info">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            className="pagination-btn"
+            onClick={() => setCurrentPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+          >
+            Next <FaChevronRight />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
