@@ -1,4 +1,4 @@
-export const API_URL = 'http://localhost:5002';
+export const API_URL = 'https://deploy-backend-seven.vercel.app';
 
 export const CARD_COLORS = [
   { bg: '#FFE4E1', border: '#FFB6C1' }, // Misty Rose
