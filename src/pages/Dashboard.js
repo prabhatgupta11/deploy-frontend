@@ -35,9 +35,23 @@ function Dashboard() {
   const fetchSnippets = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Authentication token not found. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Fetching snippets from:', `${API_URL}/api/snippets`);
       const response = await axios.get(`${API_URL}/api/snippets`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
+
+      if (!response.data) {
+        throw new Error('No data received from server');
+      }
 
       const sortedSnippets = response.data.sort((a, b) =>
         new Date(b.createdAt) - new Date(a.createdAt)
@@ -50,14 +64,19 @@ function Dashboard() {
       const tags = new Set();
       const languages = new Set();
       sortedSnippets.forEach(snippet => {
-        snippet.tags.forEach(tag => tags.add(tag));
-        languages.add(snippet.language);
+        if (snippet.tags && Array.isArray(snippet.tags)) {
+          snippet.tags.forEach(tag => tags.add(tag));
+        }
+        if (snippet.language) {
+          languages.add(snippet.language);
+        }
       });
 
       setAvailableTags(Array.from(tags));
       setAvailableLanguages(Array.from(languages));
     } catch (err) {
-      setError('Failed to fetch snippets');
+      console.error('Error fetching snippets:', err);
+      setError(err.response?.data?.message || err.message || 'Failed to fetch snippets');
       setLoading(false);
     }
   };
@@ -65,18 +84,59 @@ function Dashboard() {
   const handleBookmark = async (snippetId) => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Please log in to bookmark snippets');
+        return;
+      }
+
+      // Find the current snippet to get its bookmark status
+      const currentSnippet = snippets.find(s => s._id === snippetId);
+      if (!currentSnippet) {
+        toast.error('Snippet not found');
+        return;
+      }
+
+      console.log('Attempting to bookmark snippet:', snippetId, 'Current status:', currentSnippet.isBookmarked);
+      
       const response = await axios.patch(
         `${API_URL}/api/snippets/${snippetId}/bookmark`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        { isBookmarked: !currentSnippet.isBookmarked }, // Send the new bookmark status
+        { 
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
       );
       
-      setSnippets(snippets.map(snippet => 
-        snippet._id === snippetId ? response.data : snippet
-      ));
-      toast.success(response.data.isBookmarked ? 'Snippet bookmarked' : 'Bookmark removed');
+      console.log('Bookmark response:', response.data);
+      
+      if (response.data) {
+        // Update the snippets array with the new bookmark status
+        setSnippets(prevSnippets => 
+          prevSnippets.map(snippet => 
+            snippet._id === snippetId ? { ...snippet, isBookmarked: response.data.isBookmarked } : snippet
+          )
+        );
+        toast.success(response.data.isBookmarked ? 'Snippet bookmarked' : 'Bookmark removed');
+      } else {
+        throw new Error('No response data received');
+      }
     } catch (err) {
       console.error('Failed to update bookmark:', err);
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      
+      if (err.response?.status === 404) {
+        toast.error('Snippet not found or you do not have permission to bookmark it');
+      } else if (err.response?.status === 401) {
+        toast.error('Please log in again to continue');
+      } else {
+        toast.error(err.response?.data?.message || 'Failed to update bookmark');
+      }
     }
   };
 
@@ -252,14 +312,32 @@ function Dashboard() {
 
       {filteredSnippets.length === 0 ? (
         <div className="empty-state">
-          <FaCode className="empty-state-icon" />
-          <h2 className="empty-state-title">No Snippets Found</h2>
-          <p className="empty-state-description">
-            Create your first code snippet to get started
-          </p>
-          <Link to="/new-snippet" className="new-snippet-btn">
-            <FaPlus /> Create New Snippet
-          </Link>
+          <div className="empty-state-content">
+            <div className="empty-state-icon-wrapper">
+              <FaCode className="empty-state-icon" />
+            </div>
+            <h2 className="empty-state-title">Welcome to Your Code Snippets Dashboard!</h2>
+            <p className="empty-state-description">
+              You haven't created any code snippets yet. Start organizing your code by creating your first snippet.
+            </p>
+            <div className="empty-state-features">
+              <div className="feature">
+                <FaBookmark className="feature-icon" />
+                <span>Bookmark your favorite snippets</span>
+              </div>
+              <div className="feature">
+                <FaStar className="feature-icon" />
+                <span>Star important code</span>
+              </div>
+              <div className="feature">
+                <FaCode className="feature-icon" />
+                <span>Organize by language and tags</span>
+              </div>
+            </div>
+            <Link to="/new-snippet" className="new-snippet-btn empty-state-btn">
+              <FaPlus /> Create Your First Snippet
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="pagination">

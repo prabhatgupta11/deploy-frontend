@@ -1,14 +1,12 @@
 import React from 'react';
-import { Card, CardContent, Typography, IconButton, Box } from '@mui/material';
+import { Card, CardContent, Typography, IconButton, Box, Tooltip } from '@mui/material';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import StarIcon from '@mui/icons-material/Star';
-// import { useAuth } from '../contexts/AuthContext';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { docco } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 
 const SnippetCard = ({ snippet, onBookmark, onStar }) => {
-  // const { user } = useAuth();
-
   const handleBookmark = (e) => {
     e.stopPropagation();
     onBookmark(snippet._id);
@@ -17,6 +15,16 @@ const SnippetCard = ({ snippet, onBookmark, onStar }) => {
   const handleStar = (e) => {
     e.stopPropagation();
     onStar(snippet._id);
+  };
+
+  const handleCopy = async (e) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(snippet.code);
+      // You might want to show a toast notification here
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
   };
 
   return (
@@ -36,20 +44,32 @@ const SnippetCard = ({ snippet, onBookmark, onStar }) => {
             {snippet.title}
           </Typography>
           <Box>
-            <IconButton 
-              onClick={handleBookmark}
-              color={snippet.isBookmarked ? 'primary' : 'default'}
-              size="small"
-            >
-              <BookmarkIcon />
-            </IconButton>
-            <IconButton 
-              onClick={handleStar}
-              color={snippet.isStarred ? 'warning' : 'default'}
-              size="small"
-            >
-              <StarIcon />
-            </IconButton>
+            <Tooltip title="Copy Code">
+              <IconButton 
+                onClick={handleCopy}
+                size="small"
+              >
+                <ContentCopyIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={snippet.isBookmarked ? "Remove Bookmark" : "Add Bookmark"}>
+              <IconButton 
+                onClick={handleBookmark}
+                color={snippet.isBookmarked ? 'primary' : 'default'}
+                size="small"
+              >
+                <BookmarkIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={snippet.isStarred ? "Remove Star" : "Add Star"}>
+              <IconButton 
+                onClick={handleStar}
+                color={snippet.isStarred ? 'warning' : 'default'}
+                size="small"
+              >
+                <StarIcon />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Box>
         <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -65,6 +85,7 @@ const SnippetCard = ({ snippet, onBookmark, onStar }) => {
             mb: 2,
             borderRadius: 1,
             overflow: 'hidden',
+            position: 'relative',
             '& pre': {
               margin: 0,
               padding: '8px !important',
